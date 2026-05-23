@@ -55,12 +55,12 @@ pub trait Parser<'p> {
         MapRes { parser: self, map: f, phantom: PhantomData }
     }
 
-    fn and_then<'q, U, F: FnMut(Self::Result) -> &'q [u8], Q: Parser<'q, Result=U, Error=Self::Error>>(
+    fn map_parser<'q, U, F: FnMut(Self::Result) -> &'q [u8], Q: Parser<'q, Result=U, Error=Self::Error>>(
         self,
         f: F,
         then: Q,
-    ) -> AndThen<'p, 'q, Self::Result, U, Self::Error, Self, F, Q> where Self: Sized {
-        AndThen { parser: self, map: f, then, phantom: PhantomData }
+    ) -> MapParser<'p, 'q, Self::Result, U, Self::Error, Self, F, Q> where Self: Sized {
+        MapParser { parser: self, map: f, then, phantom: PhantomData }
     }
 }
 
@@ -172,7 +172,7 @@ impl<'p, E, X, P: Parser<'p, Error=E>, F: FnMut(E) -> X> Parser<'p> for MapErr<'
     }
 }
 
-pub struct AndThen<
+pub struct MapParser<
     'p,
     'q,
     T,
@@ -197,7 +197,7 @@ impl<
     P: Parser<'p, Result=T, Error=E>,
     F: FnMut(T) -> &'q [u8],
     Q: Parser<'q, Result=U, Error=E>,
-> Parser<'p> for AndThen<'p, 'q, T, U, E, P, F, Q> {
+> Parser<'p> for MapParser<'p, 'q, T, U, E, P, F, Q> {
     type Result = U;
     type Error = E;
 
@@ -351,9 +351,9 @@ mod tests {
     }
 
     #[test]
-    fn and_then() {
+    fn map_parser() {
         let res = take(2).map_err(|_| ())
-            .and_then(|x| x, (u16le().map_err(|_| ()), eof().map_err(|_| ()))).parse(&[2, 0, 3, 4]);
+            .map_parser(|x| x, (u16le().map_err(|_| ()), eof().map_err(|_| ()))).parse(&[2, 0, 3, 4]);
         assert!(res.is_ok());
         assert_eq!(res.ok().unwrap(), ((2u16, ()), &[3u8, 4][..]));
     }
