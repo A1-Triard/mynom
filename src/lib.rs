@@ -4,6 +4,7 @@
 
 use core::error::Error;
 use core::fmt::{self, Formatter, Display};
+use core::marker::PhantomData;
 
 #[derive(Debug)]
 pub struct UnexpectedEof;
@@ -16,32 +17,38 @@ impl Display for UnexpectedEof {
 
 impl Error for UnexpectedEof { }
 
-pub trait Parser {
+pub trait Parser<'p> {
     type Result;
     type Error;
 
-    fn parse<'a>(&mut self, input: &'a [u8]) -> Result<(Self::Result, &'a [u8]), Self::Error>;
+    fn parse(&mut self, input: &'p [u8]) -> Result<(Self::Result, &'p [u8]), Self::Error>;
 
-    fn map<U, F: FnMut(Self::Result) -> U>(self, f: F) -> Map<Self::Result, U, Self, F> where Self: Sized {
-        Map { parser: self, map: f }
+    fn map<U, F: FnMut(Self::Result) -> U>(
+        self,
+        f: F,
+    ) -> Map<'p, Self::Result, U, Self, F> where Self: Sized {
+        Map { parser: self, map: f, phantom: PhantomData }
     }
 
-    fn map_err<X, F: FnMut(Self::Error) -> X>(self, f: F) -> MapErr<Self::Error, X, Self, F> where Self: Sized {
-        MapErr { parser: self, map: f }
+    fn map_err<X, F: FnMut(Self::Error) -> X>(
+        self,
+        f: F,
+    ) -> MapErr<'p, Self::Error, X, Self, F> where Self: Sized {
+        MapErr { parser: self, map: f, phantom: PhantomData }
     }
 
     fn map_res<U, F: FnMut(Self::Result) -> Result<U, Self::Error>>(
         self,
         f: F,
-    ) -> MapRes<Self::Result, U, Self, F> where Self: Sized {
-        MapRes { parser: self, map: f }
+    ) -> MapRes<'p, Self::Result, U, Self, F> where Self: Sized {
+        MapRes { parser: self, map: f, phantom: PhantomData }
     }
 
-    fn and_then<U, Q: Parser<Result=U, Error=Self::Error>, F: FnMut(Self::Result) -> Q>(
+    fn and_then<U, Q: Parser<'p, Result=U, Error=Self::Error>, F: FnMut(Self::Result) -> Q>(
         self,
         f: F,
-    ) -> AndThen<Self::Result, U, Self::Error, Self, Q, F> where Self: Sized {
-        AndThen { parser: self, map: f }
+    ) -> AndThen<'p, Self::Result, U, Self::Error, Self, Q, F> where Self: Sized {
+        AndThen { parser: self, map: f, phantom: PhantomData }
     }
 }
 
@@ -49,11 +56,11 @@ macro_rules! impl_parser_for_tuple {
     (
         $($T:ident),+$(,)?
     ) => {
-        impl<E, $($T: Parser<Error=E>,)+> Parser for ($($T,)+) {
+        impl<'p, E, $($T: Parser<'p, Error=E>,)+> Parser<'p> for ($($T,)+) {
             type Result = ($($T::Result,)+);
             type Error = E;
 
-            fn parse<'a>(&mut self, input: &'a [u8]) -> Result<(Self::Result, &'a [u8]), Self::Error> {
+            fn parse(&mut self, input: &'p [u8]) -> Result<(Self::Result, &'p [u8]), Self::Error> {
                 let mut x = input;
                 #[allow(non_snake_case)]
                 let ($($T,)+) = self;
@@ -93,16 +100,17 @@ impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, 
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X);
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y);
 
-pub struct Map<T, U, P: Parser<Result=T>, F: FnMut(T) -> U> {
+pub struct Map<'p, T, U, P: Parser<'p, Result=T>, F: FnMut(T) -> U> {
     parser: P,
     map: F,
+    phantom: PhantomData<&'p ()>,
 }
 
-impl<T, U, P: Parser<Result=T>, F: FnMut(T) -> U> Parser for Map<T, U, P, F> {
+impl<'p, T, U, P: Parser<'p, Result=T>, F: FnMut(T) -> U> Parser<'p> for Map<'p, T, U, P, F> {
     type Result = U;
     type Error = P::Error;
 
-    fn parse<'a>(&mut self, input: &'a [u8]) -> Result<(U, &'a [u8]), Self::Error> {
+    fn parse(&mut self, input: &'p [u8]) -> Result<(U, &'p [u8]), Self::Error> {
         match self.parser.parse(input) {
             Ok((t, r)) => Ok(((self.map)(t), r)),
             Err(e) => Err(e),
@@ -110,16 +118,23 @@ impl<T, U, P: Parser<Result=T>, F: FnMut(T) -> U> Parser for Map<T, U, P, F> {
     }
 }
 
-pub struct MapRes<T, U, P: Parser<Result=T>, F: FnMut(T) -> Result<U, P::Error>> {
+pub struct MapRes<'p, T, U, P: Parser<'p, Result=T>, F: FnMut(T) -> Result<U, P::Error>> {
     parser: P,
     map: F,
+    phantom: PhantomData<&'p ()>,
 }
 
-impl<T, U, P: Parser<Result=T>, F: FnMut(T) -> Result<U, P::Error>> Parser for MapRes<T, U, P, F> {
+impl<
+    'p,
+    T,
+    U,
+    P: Parser<'p, Result=T>,
+    F: FnMut(T) -> Result<U, P::Error>
+> Parser<'p> for MapRes<'p, T, U, P, F> {
     type Result = U;
     type Error = P::Error;
 
-    fn parse<'a>(&mut self, input: &'a [u8]) -> Result<(U, &'a [u8]), Self::Error> {
+    fn parse(&mut self, input: &'p [u8]) -> Result<(U, &'p [u8]), Self::Error> {
         match self.parser.parse(input) {
             Ok((t, r)) => match (self.map)(t) {
                 Ok(x) => Ok((x, r)),
@@ -130,44 +145,48 @@ impl<T, U, P: Parser<Result=T>, F: FnMut(T) -> Result<U, P::Error>> Parser for M
     }
 }
 
-pub struct MapErr<E, X, P: Parser<Error=E>, F: FnMut(E) -> X> {
+pub struct MapErr<'p, E, X, P: Parser<'p, Error=E>, F: FnMut(E) -> X> {
     parser: P,
     map: F,
+    phantom: PhantomData<&'p ()>,
 }
 
-impl<E, X, P: Parser<Error=E>, F: FnMut(E) -> X> Parser for MapErr<E, X, P, F> {
+impl<'p, E, X, P: Parser<'p, Error=E>, F: FnMut(E) -> X> Parser<'p> for MapErr<'p, E, X, P, F> {
     type Result = P::Result;
     type Error = X;
 
-    fn parse<'a>(&mut self, input: &'a [u8]) -> Result<(Self::Result, &'a [u8]), X> {
+    fn parse(&mut self, input: &'p [u8]) -> Result<(Self::Result, &'p [u8]), X> {
         self.parser.parse(input).map_err(|x| (self.map)(x))
     }
 }
 
 pub struct AndThen<
+    'p,
     T,
     U,
     E,
-    P: Parser<Result=T, Error=E>,
-    Q: Parser<Result=U, Error=E>,
+    P: Parser<'p, Result=T, Error=E>,
+    Q: Parser<'p, Result=U, Error=E>,
     F: FnMut(T) -> Q,
 > {
     parser: P,
     map: F,
+    phantom: PhantomData<&'p ()>,
 }
 
 impl<
+    'p,
     T,
     U,
     E,
-    P: Parser<Result=T, Error=E>,
-    Q: Parser<Result=U, Error=E>,
+    P: Parser<'p, Result=T, Error=E>,
+    Q: Parser<'p, Result=U, Error=E>,
     F: FnMut(T) -> Q,
-> Parser for AndThen<T, U, E, P, Q, F> {
+> Parser<'p> for AndThen<'p, T, U, E, P, Q, F> {
     type Result = U;
     type Error = E;
 
-    fn parse<'a>(&mut self, input: &'a [u8]) -> Result<(U, &'a [u8]), E> {
+    fn parse(&mut self, input: &'p [u8]) -> Result<(U, &'p [u8]), E> {
         match self.parser.parse(input) {
             Ok((t, r)) => match (self.map)(t).parse(r) {
                 Ok((x, r)) => Ok((x, r)),
@@ -178,28 +197,26 @@ impl<
     }
 }
 
-pub struct Consume<T, F: FnMut(&[u8]) -> T> {
-    f: F,
-}
+pub struct Consume(());
 
-impl<T, F: FnMut(&[u8]) -> T> Parser for Consume<T, F> {
-    type Result = T;
+impl<'p> Parser<'p> for Consume {
+    type Result = &'p [u8];
     type Error = !;
 
-    fn parse<'a>(&mut self, input: &'a [u8]) -> Result<(T, &'a [u8]), !> {
-        Ok(((self.f)(input), &input[input.len() ..]))
+    fn parse(&mut self, input: &'p [u8]) -> Result<(&'p [u8], &'p [u8]), !> {
+        Ok((input, &input[input.len() ..]))
     }
 }
 
-pub fn consume<T, F: FnMut(&[u8]) -> T>(f: F) -> Consume<T, F> { Consume { f } }
+pub fn consume() -> Consume { Consume(()) }
 
 pub struct U8(());
 
-impl Parser for U8 {
+impl<'p> Parser<'p> for U8 {
     type Result = u8;
     type Error = UnexpectedEof;
 
-    fn parse<'a>(&mut self, input: &'a [u8]) -> Result<(u8, &'a [u8]), UnexpectedEof> {
+    fn parse(&mut self, input: &'p [u8]) -> Result<(u8, &'p [u8]), UnexpectedEof> {
         if input.is_empty() {
             Err(UnexpectedEof)
         } else {
@@ -212,11 +229,11 @@ pub fn u8() -> U8 { U8(()) }
 
 pub struct U16le(());
 
-impl Parser for U16le {
+impl<'p> Parser<'p> for U16le {
     type Result = u16;
     type Error = UnexpectedEof;
 
-    fn parse<'a>(&mut self, input: &'a [u8]) -> Result<(u16, &'a [u8]), UnexpectedEof> {
+    fn parse(&mut self, input: &'p [u8]) -> Result<(u16, &'p [u8]), UnexpectedEof> {
         if input.len() < 2 {
             Err(UnexpectedEof)
         } else {
@@ -232,7 +249,7 @@ mod tests {
     use core::num::NonZero;
     use super::*;
 
-    fn non_zero_u16le() -> impl Parser<Result=Option<NonZero<u16>>, Error=UnexpectedEof> {
+    fn non_zero_u16le<'p>() -> impl Parser<'p, Result=Option<NonZero<u16>>, Error=UnexpectedEof> {
         u16le().map(NonZero::new)
     }
 
@@ -245,7 +262,7 @@ mod tests {
 
     #[test]
     fn consume_all() {
-        let res = consume(|x| x).parse(&[2, 0]);
+        let res = consume().parse(&[2, 0]);
         assert!(res.is_ok());
         assert_eq!(res.ok().unwrap(), (&[2, 0][..], &[][..]));
     }
