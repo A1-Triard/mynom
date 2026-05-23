@@ -244,6 +244,40 @@ impl<'p> Parser<'p> for U16le {
 
 pub fn u16le() -> U16le { U16le(()) }
 
+pub struct U32le(());
+
+impl<'p> Parser<'p> for U32le {
+    type Result = u32;
+    type Error = UnexpectedEof;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(u32, &'p [u8]), UnexpectedEof> {
+        if input.len() < 4 {
+            Err(UnexpectedEof)
+        } else {
+            Ok((u32::from_le_bytes(*input[.. 4].as_array().unwrap()), &input[4 ..]))
+        }
+    }
+}
+
+pub fn u32le() -> U32le { U32le(()) }
+
+pub struct U64le(());
+
+impl<'p> Parser<'p> for U64le {
+    type Result = u64;
+    type Error = UnexpectedEof;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(u64, &'p [u8]), UnexpectedEof> {
+        if input.len() < 8 {
+            Err(UnexpectedEof)
+        } else {
+            Ok((u64::from_le_bytes(*input[.. 8].as_array().unwrap()), &input[8 ..]))
+        }
+    }
+}
+
+pub fn u64le() -> U64le { U64le(()) }
+
 #[cfg(test)]
 mod tests {
     use core::num::NonZero;
