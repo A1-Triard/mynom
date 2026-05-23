@@ -28,6 +28,34 @@ impl Display for ExpectedEof {
 
 impl Error for ExpectedEof { }
 
+#[derive(Debug)]
+pub struct TagMismatch;
+
+impl Display for TagMismatch {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "tag mismatch")
+    }
+}
+
+impl Error for TagMismatch { }
+
+#[derive(Debug)]
+pub enum TagError {
+    UnexpectedEof(UnexpectedEof),
+    TagMismatch(TagMismatch),
+}
+
+impl Display for TagError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            TagError::UnexpectedEof(e) => write!(f, "{}", e),
+            TagError::TagMismatch(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+impl Error for TagError { }
+
 pub trait Parser<'p> {
     type Result;
     type Error;
@@ -327,6 +355,25 @@ impl<'p> Parser<'p> for Take {
 }
 
 pub fn take(n: usize) -> Take { Take(n) }
+
+pub struct Tag<'a>(&'a [u8]);
+
+impl<'p, 'a> Parser<'p> for Tag<'a> {
+    type Result = ();
+    type Error = TagError;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<((), &'p [u8]), TagError> {
+        if input.len() < self.0.len() {
+            Err(TagError::UnexpectedEof(UnexpectedEof))
+        } else if &input[.. self.0.len()] != self.0 {
+            Err(TagError::TagMismatch(TagMismatch))
+        } else {
+            Ok(((), &input[self.0.len() ..]))
+        }
+    }
+}
+
+pub fn tag(x: &[u8]) -> Tag<'_> { Tag(x) }
 
 pub struct U8(());
 
