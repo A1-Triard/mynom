@@ -210,6 +210,23 @@ impl<'p> Parser<'p> for Consume {
 
 pub fn consume() -> Consume { Consume(()) }
 
+pub struct Take(usize);
+
+impl<'p> Parser<'p> for Take {
+    type Result = &'p [u8];
+    type Error = UnexpectedEof;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(&'p [u8], &'p [u8]), UnexpectedEof> {
+        if input.len() < self.0 {
+            Err(UnexpectedEof)
+        } else {
+            Ok((&input[.. self.0], &input[self.0 ..]))
+        }
+    }
+}
+
+pub fn take(n: usize) -> Take { Take(n) }
+
 pub struct U8(());
 
 impl<'p> Parser<'p> for U8 {
