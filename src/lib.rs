@@ -104,6 +104,14 @@ pub trait Parser<'p> {
     ) -> AndThen<'p, Self::Result, U, Self::Error, Self, Q, F> where Self: Sized {
         AndThen { parser: self, map: f, phantom: PhantomData }
     }
+
+    fn repeat_until_eof<A, I: FnMut() -> A, F: FnMut(A, Self::Result) -> A>(
+        self,
+        init: I,
+        f: F,
+    ) -> RepeatUntilEof<'p, Self::Result, A, Self, I, F> where Self: Sized {
+        RepeatUntilEof { parser: self, init, f, phantom: PhantomData }
+    }
 }
 
 macro_rules! impl_parser_for_tuple {
@@ -153,6 +161,46 @@ impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, 
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W);
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X);
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y);
+
+pub struct RepeatUntilEof<
+    'p,
+    T,
+    A,
+    P: Parser<'p, Result=T>,
+    I: FnMut() -> A,
+    F: FnMut(A, T) -> A,
+> {
+    parser: P,
+    init: I,
+    f: F,
+    phantom: PhantomData<&'p ()>,
+}
+
+impl<
+    'p,
+    T,
+    A,
+    P: Parser<'p, Result=T>,
+    I: FnMut() -> A,
+    F: FnMut(A, T) -> A,
+> Parser<'p> for RepeatUntilEof<'p, T, A, P, I, F> {
+    type Result = A;
+    type Error = P::Error;
+
+    fn parse(&mut self, mut input: &'p [u8]) -> Result<(A, &'p [u8]), Self::Error> {
+        let mut acc = (self.init)();
+        while !input.is_empty() {
+            match self.parser.parse(input) {
+                Ok((t, r)) => {
+                    acc = (self.f)(acc, t);
+                    input = r;
+                },
+                Err(e) => return Err(e),
+            }
+        }
+        Ok((acc, input))
+    }
+}
 
 pub struct Map<'p, T, U, P: Parser<'p, Result=T>, F: FnMut(T) -> U> {
     parser: P,
