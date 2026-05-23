@@ -62,6 +62,20 @@ pub trait Parser<'p> {
     ) -> MapParser<'p, 'q, Self::Result, U, Self::Error, Self, F, Q> where Self: Sized {
         MapParser { parser: self, map: f, then, phantom: PhantomData }
     }
+
+    fn and<U, Q: Parser<'p, Result=U, Error=Self::Error>>(
+        self,
+        q: Q,
+    ) -> And<'p, Self::Result, U, Self::Error, Self, Q> where Self: Sized {
+        And { parser: self, and: q, phantom: PhantomData }
+    }
+
+    fn and_then<U, Q: Parser<'p, Result=U, Error=Self::Error>, F: FnMut(Self::Result) -> Q>(
+        self,
+        f: F,
+    ) -> AndThen<'p, Self::Result, U, Self::Error, Self, Q, F> where Self: Sized {
+        AndThen { parser: self, map: f, phantom: PhantomData }
+    }
 }
 
 macro_rules! impl_parser_for_tuple {
@@ -205,6 +219,78 @@ impl<
         match self.parser.parse(input) {
             Ok((t, r)) => match self.then.parse((self.map)(t)) {
                 Ok((x, _)) => Ok((x, r)),
+                Err(e) => Err(e),
+            },
+            Err(e) => Err(e),
+        }
+    }
+}
+
+pub struct And<
+    'p,
+    T,
+    U,
+    E,
+    P: Parser<'p, Result=T, Error=E>,
+    Q: Parser<'p, Result=U, Error=E>,
+> {
+    parser: P,
+    and: Q,
+    phantom: PhantomData<&'p ()>,
+}
+
+impl<
+    'p,
+    T,
+    U,
+    E,
+    P: Parser<'p, Result=T, Error=E>,
+    Q: Parser<'p, Result=U, Error=E>,
+> Parser<'p> for And<'p, T, U, E, P, Q> {
+    type Result = (T, U);
+    type Error = E;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<((T, U), &'p [u8]), E> {
+        match self.parser.parse(input) {
+            Ok((t, r)) => match self.and.parse(r) {
+                Ok((x, r)) => Ok(((t, x), r)),
+                Err(e) => Err(e),
+            },
+            Err(e) => Err(e),
+        }
+    }
+}
+
+pub struct AndThen<
+    'p,
+    T,
+    U,
+    E,
+    P: Parser<'p, Result=T, Error=E>,
+    Q: Parser<'p, Result=U, Error=E>,
+    F: FnMut(T) -> Q,
+> {
+    parser: P,
+    map: F,
+    phantom: PhantomData<&'p ()>,
+}
+
+impl<
+    'p,
+    T,
+    U,
+    E,
+    P: Parser<'p, Result=T, Error=E>,
+    Q: Parser<'p, Result=U, Error=E>,
+    F: FnMut(T) -> Q,
+> Parser<'p> for AndThen<'p, T, U, E, P, Q, F> {
+    type Result = U;
+    type Error = E;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(U, &'p [u8]), E> {
+        match self.parser.parse(input) {
+            Ok((t, r)) => match (self.map)(t).parse(r) {
+                Ok((x, r)) => Ok((x, r)),
                 Err(e) => Err(e),
             },
             Err(e) => Err(e),
