@@ -171,6 +171,42 @@ impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, 
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X);
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y);
 
+pub struct Examine<
+    'p,
+    T,
+    E,
+    Q: Parser<'p, Result=T, Error=E>,
+    F: FnMut(&[u8]) -> Q,
+> {
+    f: F,
+    phantom: PhantomData<&'p ()>,
+}
+
+impl<
+    'p,
+    T,
+    E,
+    Q: Parser<'p, Result=T, Error=E>,
+    F: FnMut(&[u8]) -> Q,
+> Parser<'p> for Examine<'p, T, E, Q, F> {
+    type Result = T;
+    type Error = E;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(T, &'p [u8]), E> {
+        (self.f)(input).parse(input)
+    }
+}
+
+pub fn examine<
+    'p, 
+    T,
+    E,
+    Q: Parser<'p, Result=T, Error=E>,
+    F: FnMut(&[u8]) -> Q,
+>(f: F) -> Examine<'p, T, E, Q, F> {
+    Examine { f, phantom: PhantomData }
+}
+
 pub struct Repeat<
     'p,
     T,
