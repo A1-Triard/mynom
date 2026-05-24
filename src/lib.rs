@@ -121,6 +121,10 @@ pub trait Parser<'p> {
     ) -> RepeatUntilEof<'p, Self::Result, A, Self, I, F> where Self: Sized {
         RepeatUntilEof { parser: self, init, f, phantom: PhantomData }
     }
+
+    fn peek(self) -> Peek<'p, Self> where Self: Sized {
+        Peek { parser: self, phantom: PhantomData }
+    }
 }
 
 macro_rules! impl_parser_for_tuple {
@@ -171,40 +175,27 @@ impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, 
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X);
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y);
 
-pub struct Examine<
+pub struct Peek<
     'p,
-    T,
-    E,
-    Q: Parser<'p, Result=T, Error=E>,
-    F: FnMut(&[u8]) -> Q,
+    P: Parser<'p>,
 > {
-    f: F,
+    parser: P,
     phantom: PhantomData<&'p ()>,
 }
 
 impl<
     'p,
-    T,
-    E,
-    Q: Parser<'p, Result=T, Error=E>,
-    F: FnMut(&[u8]) -> Q,
-> Parser<'p> for Examine<'p, T, E, Q, F> {
-    type Result = T;
-    type Error = E;
+    P: Parser<'p>,
+> Parser<'p> for Peek<'p, P> {
+    type Result = P::Result;
+    type Error = P::Error;
 
-    fn parse(&mut self, input: &'p [u8]) -> Result<(T, &'p [u8]), E> {
-        (self.f)(input).parse(input)
+    fn parse(&mut self, input: &'p [u8]) -> Result<(Self::Result, &'p [u8]), Self::Error> {
+        match self.parser.parse(input) {
+            Ok((t, _)) => Ok((t, input)),
+            Err(e) => Err(e),
+        }
     }
-}
-
-pub fn examine<
-    'p, 
-    T,
-    E,
-    Q: Parser<'p, Result=T, Error=E>,
-    F: FnMut(&[u8]) -> Q,
->(f: F) -> Examine<'p, T, E, Q, F> {
-    Examine { f, phantom: PhantomData }
 }
 
 pub struct Repeat<
