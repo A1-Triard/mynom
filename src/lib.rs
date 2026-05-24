@@ -568,6 +568,108 @@ impl<'p> Parser<'p> for U64le {
 
 pub fn u64le() -> U64le { U64le(()) }
 
+pub struct I8(());
+
+impl<'p> Parser<'p> for I8 {
+    type Result = i8;
+    type Error = UnexpectedEof;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(i8, &'p [u8]), UnexpectedEof> {
+        if input.is_empty() {
+            Err(UnexpectedEof)
+        } else {
+            Ok((input[0].cast_signed(), &input[1 ..]))
+        }
+    }
+}
+
+pub fn i8() -> I8 { I8(()) }
+
+pub struct I16le(());
+
+impl<'p> Parser<'p> for I16le {
+    type Result = i16;
+    type Error = UnexpectedEof;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(i16, &'p [u8]), UnexpectedEof> {
+        if input.len() < 2 {
+            Err(UnexpectedEof)
+        } else {
+            Ok((i16::from_le_bytes(*input[.. 2].as_array().unwrap()), &input[2 ..]))
+        }
+    }
+}
+
+pub fn i16le() -> I16le { I16le(()) }
+
+pub struct I32le(());
+
+impl<'p> Parser<'p> for I32le {
+    type Result = i32;
+    type Error = UnexpectedEof;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(i32, &'p [u8]), UnexpectedEof> {
+        if input.len() < 4 {
+            Err(UnexpectedEof)
+        } else {
+            Ok((i32::from_le_bytes(*input[.. 4].as_array().unwrap()), &input[4 ..]))
+        }
+    }
+}
+
+pub fn i32le() -> I32le { I32le(()) }
+
+pub struct I64le(());
+
+impl<'p> Parser<'p> for I64le {
+    type Result = i64;
+    type Error = UnexpectedEof;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(i64, &'p [u8]), UnexpectedEof> {
+        if input.len() < 8 {
+            Err(UnexpectedEof)
+        } else {
+            Ok((i64::from_le_bytes(*input[.. 8].as_array().unwrap()), &input[8 ..]))
+        }
+    }
+}
+
+pub fn i64le() -> I64le { I64le(()) }
+
+pub struct F32le(());
+
+impl<'p> Parser<'p> for F32le {
+    type Result = f32;
+    type Error = UnexpectedEof;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(f32, &'p [u8]), UnexpectedEof> {
+        if input.len() < 4 {
+            Err(UnexpectedEof)
+        } else {
+            Ok((f32::from_le_bytes(*input[.. 4].as_array().unwrap()), &input[4 ..]))
+        }
+    }
+}
+
+pub fn f32le() -> F32le { F32le(()) }
+
+pub struct F64le(());
+
+impl<'p> Parser<'p> for F64le {
+    type Result = f64;
+    type Error = UnexpectedEof;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(f64, &'p [u8]), UnexpectedEof> {
+        if input.len() < 8 {
+            Err(UnexpectedEof)
+        } else {
+            Ok((f64::from_le_bytes(*input[.. 8].as_array().unwrap()), &input[8 ..]))
+        }
+    }
+}
+
+pub fn f64le() -> F64le { F64le(()) }
+
 pub struct Eof(());
 
 impl<'p> Parser<'p> for Eof {
