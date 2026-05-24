@@ -2,9 +2,10 @@
 
 #![no_std]
 
-use core::error::Error;
+use core::error::Error as core_Error;
 use core::fmt::{self, Formatter, Display};
 use core::marker::PhantomData;
+use either::{Either, Left, Right};
 
 #[derive(Debug)]
 pub struct UnexpectedEof;
@@ -15,7 +16,7 @@ impl Display for UnexpectedEof {
     }
 }
 
-impl Error for UnexpectedEof { }
+impl core_Error for UnexpectedEof { }
 
 #[derive(Debug)]
 pub struct ExpectedEof;
@@ -26,7 +27,7 @@ impl Display for ExpectedEof {
     }
 }
 
-impl Error for ExpectedEof { }
+impl core_Error for ExpectedEof { }
 
 #[derive(Debug)]
 pub struct TagMismatch;
@@ -37,7 +38,7 @@ impl Display for TagMismatch {
     }
 }
 
-impl Error for TagMismatch { }
+impl core_Error for TagMismatch { }
 
 #[derive(Debug)]
 pub enum TagError {
@@ -54,7 +55,7 @@ impl Display for TagError {
     }
 }
 
-impl Error for TagError { }
+impl core_Error for TagError { }
 
 pub trait Parser<'p> {
     type Result;
@@ -174,6 +175,24 @@ impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, 
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W);
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X);
 impl_parser_for_tuple!(A, B, C, D, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y);
+
+impl<'p, E, P: Parser<'p, Error=E>, Q: Parser<'p, Error=E>> Parser<'p> for Either<Q, P> {
+    type Result = Either<Q::Result, P::Result>;
+    type Error = E;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(Self::Result, &'p [u8]), E> {
+        match self {
+            Left(q) => match q.parse(input) {
+                Ok((q, r)) => Ok((Left(q), r)),
+                Err(e) => Err(e),
+            },
+            Right(p) => match p.parse(input) {
+                Ok((p, r)) => Ok((Right(p), r)),
+                Err(e) => Err(e),
+            },
+        }
+    }
+}
 
 pub struct Peek<
     'p,
@@ -686,6 +705,21 @@ impl<'p> Parser<'p> for Eof {
 }
 
 pub fn eof() -> Eof { Eof(()) }
+
+pub struct Error<E, F: FnMut() -> E> {
+    err: F,
+}
+
+impl<'p, E, F: FnMut() -> E> Parser<'p> for Error<E, F> {
+    type Result = !;
+    type Error = E;
+
+    fn parse(&mut self, _input: &'p [u8]) -> Result<(!, &'p [u8]), E> {
+        Err((self.err)())
+    }
+}
+
+pub fn error<E, F: FnMut() -> E>(f: F) -> Error<E, F> { Error { err: f } }
 
 #[cfg(test)]
 mod tests {
