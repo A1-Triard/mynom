@@ -998,13 +998,13 @@ mod tests {
     use core::num::NonZero;
     use super::*;
 
-    fn non_zero_u16le<'p>() -> impl Parser<'p, Result=Option<NonZero<u16>>, Error=UnexpectedEof> {
-        u16le().map(NonZero::new)
+    fn non_zero_u16_le<'p>() -> impl Parser<'p, Result=Option<NonZero<u16>>, Error=UnexpectedEof> {
+        u16_le().map(NonZero::new)
     }
 
     #[test]
     fn it_works() {
-        let res = non_zero_u16le().parse(&[2, 0]);
+        let res = non_zero_u16_le().parse(&[2, 0]);
         assert!(res.is_ok());
         assert_eq!(res.ok().unwrap(), (NonZero::new(2u16), &[][..]));
     }
@@ -1019,7 +1019,7 @@ mod tests {
     #[test]
     fn map_parser() {
         let res = take(2).map_err(|_| ())
-            .map_parser(|x| x, (u16le().map_err(|_| ()), eof().map_err(|_| ()))).parse(&[2, 0, 3, 4]);
+            .map_parser(|x| x, (u16_le().map_err(|_| ()), eof().map_err(|_| ()))).parse(&[2, 0, 3, 4]);
         assert!(res.is_ok());
         assert_eq!(res.ok().unwrap(), ((2u16, ()), &[3u8, 4][..]));
     }

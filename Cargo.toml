@@ -1,7 +1,19 @@
 [package]
-name = "mynom"
-version = "0.1.0"
 edition = "2024"
+name = "mynom"
+version = "0.0.1"
+#rust-version = "nightly"
+authors = ["warlock <internalmike@gmail.com>"]
+description = "A variant of nom parser combinator library with strong-typed errors."
+readme = "README.md"
+documentation = "https://docs.rs/mynom/"
+keywords = ["nom", "typed", "error"]
+categories = ["parsing"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/A1-Triard/mynom"
 
 [dependencies]
 either = { version = "1.16.0", default-features = false }
+
+[badges]
+maintenance = { status = "experimental" }
