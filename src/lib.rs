@@ -30,32 +30,39 @@ impl Display for ExpectedEof {
 impl core_Error for ExpectedEof { }
 
 #[derive(Debug)]
-pub struct TagMismatch;
-
-impl Display for TagMismatch {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "tag mismatch")
-    }
-}
-
-impl core_Error for TagMismatch { }
-
-#[derive(Debug)]
 pub enum TagError {
-    UnexpectedEof(UnexpectedEof),
-    TagMismatch(TagMismatch),
+    UnexpectedEof,
+    TagMismatch,
 }
 
 impl Display for TagError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            TagError::UnexpectedEof(e) => write!(f, "{}", e),
-            TagError::TagMismatch(e) => write!(f, "{}", e),
+            TagError::UnexpectedEof => write!(f, "unexpected eof"),
+            TagError::TagMismatch => write!(f, "tag mismatch"),
         }
     }
 }
 
 impl core_Error for TagError { }
+
+pub struct ParserFn<'p, T, E, F: FnMut(&'p [u8]) -> Result<(T, &'p [u8]), E>> {
+    f: F,
+    phantom: PhantomData<&'p (T, E)>,
+}
+
+impl<'p, T, E, F: FnMut(&'p [u8]) -> Result<(T, &'p [u8]), E>> Parser<'p> for ParserFn<'p, T, E, F> {
+    type Result = T;
+    type Error = E;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(Self::Result, &'p [u8]), Self::Error> {
+        (self.f)(input)
+    }
+}
+
+pub fn parser<'p, T, E, F: FnMut(&'p [u8]) -> Result<(T, &'p [u8]), E>>(f: F) -> ParserFn<'p, T, E, F> {
+    ParserFn { f, phantom: PhantomData }
+}
 
 pub trait Parser<'p> {
     type Result;
@@ -508,9 +515,9 @@ impl<'p, 'a> Parser<'p> for Tag<'a> {
 
     fn parse(&mut self, input: &'p [u8]) -> Result<((), &'p [u8]), TagError> {
         if input.len() < self.0.len() {
-            Err(TagError::UnexpectedEof(UnexpectedEof))
+            Err(TagError::UnexpectedEof)
         } else if &input[.. self.0.len()] != self.0 {
-            Err(TagError::TagMismatch(TagMismatch))
+            Err(TagError::TagMismatch)
         } else {
             Ok(((), &input[self.0.len() ..]))
         }
