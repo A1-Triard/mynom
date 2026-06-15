@@ -1,5 +1,7 @@
 #![feature(never_type)]
 
+#![deny(warnings)]
+
 #![no_std]
 
 use core::error::Error as core_Error;
@@ -198,6 +200,63 @@ impl<'p, E, P: Parser<'p, Error=E>, Q: Parser<'p, Error=E>> Parser<'p> for Eithe
                 Err(e) => Err(e),
             },
         }
+    }
+}
+
+pub fn accumulate_until_eof<
+    'p,
+    A,
+    P: Parser<'p>,
+    F: FnMut(A) -> (P, A),
+    I: FnMut() -> A,
+    R: FnMut(A, P::Result) -> A,
+>(
+    parser: F,
+    init: I,
+    res: R,
+) -> AccumulateUntilEof<'p, A, P, F, I, R> {
+    AccumulateUntilEof { parser, init, res, phantom: PhantomData }
+}
+
+pub struct AccumulateUntilEof<
+    'p,
+    A,
+    P: Parser<'p>,
+    F: FnMut(A) -> (P, A),
+    I: FnMut() -> A,
+    R: FnMut(A, P::Result) -> A,
+> {
+    parser: F,
+    init: I,
+    res: R,
+    phantom: PhantomData<&'p ()>,
+}
+
+impl<
+    'p,
+    A,
+    P: Parser<'p>,
+    F: FnMut(A) -> (P, A),
+    I: FnMut() -> A,
+    R: FnMut(A, P::Result) -> A,
+> Parser<'p> for AccumulateUntilEof<'p, A, P, F, I, R> {
+    type Result = A;
+    type Error = P::Error;
+
+    fn parse(&mut self, mut input: &'p [u8]) -> Result<(Self::Result, &'p [u8]), Self::Error> {
+        let mut acc = (self.init)();
+        while !input.is_empty() {
+            let (mut parser, new_acc) = (self.parser)(acc);
+            acc = new_acc;
+            match parser.parse(input) {
+                Ok((t, r)) => {
+                    acc = (self.res)(acc, t);
+                    input = r;
+                },
+                Err(e) => return Err(e),
+            }
+        }
+        Ok((acc, input))
     }
 }
 
