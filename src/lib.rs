@@ -101,6 +101,20 @@ pub trait Parser<'p> {
         MapParser { parser: self, map: f, then, phantom: PhantomData }
     }
 
+    fn or<Q: Parser<'p, Result=Self::Result>>(
+        self,
+        q: Q,
+    ) -> Or<'p, Self::Result, Self, Q> where Self: Sized {
+        Or { parser: self, or: q, phantom: PhantomData }
+    }
+
+    fn or_else<Q: Parser<'p, Result=Self::Result>, F: FnMut(Self::Error) -> Q>(
+        self,
+        f: F,
+    ) -> OrElse<'p, Self::Result, Self::Error, Self, Q, F> where Self: Sized {
+        OrElse { parser: self, or: f, phantom: PhantomData }
+    }
+
     fn and<U, Q: Parser<'p, Result=U, Error=Self::Error>>(
         self,
         q: Q,
@@ -460,6 +474,66 @@ impl<
                 Err(e) => Err(e),
             },
             Err(e) => Err(e),
+        }
+    }
+}
+
+pub struct Or<
+    'p,
+    T,
+    P: Parser<'p, Result=T>,
+    Q: Parser<'p, Result=T>,
+> {
+    parser: P,
+    or: Q,
+    phantom: PhantomData<&'p ()>,
+}
+
+impl<
+    'p,
+    T,
+    P: Parser<'p, Result=T>,
+    Q: Parser<'p, Result=T>,
+> Parser<'p> for Or<'p, T, P, Q> {
+    type Result = T;
+    type Error = Q::Error;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(T, &'p [u8]), Self::Error> {
+        match self.parser.parse(input) {
+            Ok((t, r)) => Ok((t, r)),
+            Err(_) => self.or.parse(input),
+        }
+    }
+}
+
+pub struct OrElse<
+    'p,
+    T,
+    E,
+    P: Parser<'p, Result=T, Error=E>,
+    Q: Parser<'p, Result=T>,
+    F: FnMut(E) -> Q,
+> {
+    parser: P,
+    or: F,
+    phantom: PhantomData<&'p ()>,
+}
+
+impl<
+    'p,
+    T,
+    E,
+    P: Parser<'p, Result=T, Error=E>,
+    Q: Parser<'p, Result=T>,
+    F: FnMut(E) -> Q,
+> Parser<'p> for OrElse<'p, T, E, P, Q, F> {
+    type Result = T;
+    type Error = Q::Error;
+
+    fn parse(&mut self, input: &'p [u8]) -> Result<(T, &'p [u8]), Self::Error> {
+        match self.parser.parse(input) {
+            Ok((t, r)) => Ok((t, r)),
+            Err(e) => (self.or)(e).parse(input),
         }
     }
 }
