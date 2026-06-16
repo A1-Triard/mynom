@@ -145,6 +145,14 @@ pub trait Parser<'p> {
         RepeatUntilEof { parser: self, init, f, phantom: PhantomData }
     }
 
+    fn repeat_until_error<A, I: FnMut() -> A, F: FnMut(A, Self::Result) -> A>(
+        self,
+        init: I,
+        f: F,
+    ) -> RepeatUntilError<'p, Self::Result, A, Self, I, F> where Self: Sized {
+        RepeatUntilError { parser: self, init, f, phantom: PhantomData }
+    }
+
     fn peek(self) -> Peek<'p, Self> where Self: Sized {
         Peek { parser: self, phantom: PhantomData }
     }
@@ -371,6 +379,46 @@ impl<
                     input = r;
                 },
                 Err(e) => return Err(e),
+            }
+        }
+        Ok((acc, input))
+    }
+}
+
+pub struct RepeatUntilError<
+    'p,
+    T,
+    A,
+    P: Parser<'p, Result=T>,
+    I: FnMut() -> A,
+    F: FnMut(A, T) -> A,
+> {
+    parser: P,
+    init: I,
+    f: F,
+    phantom: PhantomData<&'p ()>,
+}
+
+impl<
+    'p,
+    T,
+    A,
+    P: Parser<'p, Result=T>,
+    I: FnMut() -> A,
+    F: FnMut(A, T) -> A,
+> Parser<'p> for RepeatUntilError<'p, T, A, P, I, F> {
+    type Result = A;
+    type Error = !;
+
+    fn parse(&mut self, mut input: &'p [u8]) -> Result<(A, &'p [u8]), Self::Error> {
+        let mut acc = (self.init)();
+        loop {
+            match self.parser.parse(input) {
+                Ok((t, r)) => {
+                    acc = (self.f)(acc, t);
+                    input = r;
+                },
+                Err(_) => break,
             }
         }
         Ok((acc, input))
