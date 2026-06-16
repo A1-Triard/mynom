@@ -93,12 +93,11 @@ pub trait Parser<'p> {
         MapRes { parser: self, map: f, phantom: PhantomData }
     }
 
-    fn map_parser<'q, U, F: FnMut(Self::Result) -> &'q [u8], Q: Parser<'q, Result=U, Error=Self::Error>>(
+    fn map_parser<'q, Q: Parser<'q, Error=Self::Error>, F: FnMut(Self::Result) -> (Q, &'q [u8])>(
         self,
         f: F,
-        then: Q,
-    ) -> MapParser<'p, 'q, Self::Result, U, Self::Error, Self, F, Q> where Self: Sized {
-        MapParser { parser: self, map: f, then, phantom: PhantomData }
+    ) -> MapParser<'p, 'q, Self::Result, Self::Error, Self, Q, F> where Self: Sized {
+        MapParser { parser: self, map: f, phantom: PhantomData }
     }
 
     fn or<Q: Parser<'p, Result=Self::Result>>(
@@ -442,15 +441,13 @@ pub struct MapParser<
     'p,
     'q,
     T,
-    U,
     E,
     P: Parser<'p, Result=T, Error=E>,
-    F: FnMut(T) -> &'q [u8],
-    Q: Parser<'q, Result=U, Error=E>,
+    Q: Parser<'q, Error=E>,
+    F: FnMut(T) -> (Q, &'q [u8]),
 > {
     parser: P,
     map: F,
-    then: Q,
     phantom: PhantomData<(&'p (), &'q ())>,
 }
 
@@ -458,20 +455,22 @@ impl<
     'p,
     'q,
     T,
-    U,
     E,
     P: Parser<'p, Result=T, Error=E>,
-    F: FnMut(T) -> &'q [u8],
-    Q: Parser<'q, Result=U, Error=E>,
-> Parser<'p> for MapParser<'p, 'q, T, U, E, P, F, Q> {
-    type Result = U;
+    Q: Parser<'q, Error=E>,
+    F: FnMut(T) -> (Q, &'q [u8]),
+> Parser<'p> for MapParser<'p, 'q, T, E, P, Q, F> {
+    type Result = Q::Result;
     type Error = E;
 
-    fn parse(&mut self, input: &'p [u8]) -> Result<(U, &'p [u8]), E> {
+    fn parse(&mut self, input: &'p [u8]) -> Result<(Self::Result, &'p [u8]), E> {
         match self.parser.parse(input) {
-            Ok((t, r)) => match self.then.parse((self.map)(t)) {
-                Ok((x, _)) => Ok((x, r)),
-                Err(e) => Err(e),
+            Ok((t, r)) => {
+                let (mut then, bytes) = (self.map)(t);
+                match then.parse(bytes) {
+                    Ok((x, _)) => Ok((x, r)),
+                    Err(e) => Err(e),
+                }
             },
             Err(e) => Err(e),
         }
